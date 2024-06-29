@@ -4,10 +4,11 @@ import (
 	"net"
 	"net/http"
 
-	"github.com/black-pepper-team/community-indexer/internal/config"
 	"gitlab.com/distributed_lab/kit/copus/types"
 	"gitlab.com/distributed_lab/logan/v3"
 	"gitlab.com/distributed_lab/logan/v3/errors"
+
+	"github.com/black-pepper-team/community-indexer/internal/config"
 )
 
 type service struct {

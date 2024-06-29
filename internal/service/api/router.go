@@ -1,9 +1,10 @@
 package service
 
 import (
-	"github.com/black-pepper-team/community-indexer/internal/service/handlers"
 	"github.com/go-chi/chi"
 	"gitlab.com/distributed_lab/ape"
+
+	"github.com/black-pepper-team/community-indexer/internal/service/handlers"
 )
 
 func (s *service) router() chi.Router {
@@ -16,8 +17,8 @@ func (s *service) router() chi.Router {
 			handlers.CtxLog(s.log),
 		),
 	)
-	r.Route("/integrations/community-indexer", func(r chi.Router) {
-		// configure endpoints here
+	r.Route("/integrations/community-indexer/v1", func(r chi.Router) {
+		r.Get("/communities", handlers.Communities)
 	})
 
 	return r

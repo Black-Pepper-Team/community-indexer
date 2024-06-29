@@ -4,5 +4,5 @@ info:
   title: community-indexer
   description: ''
 servers:
-  - url: 'https://api.demo.tokend.io'
-    description: TokenD Developer Environment
+  - url: 'https://localhost:8000'
+    description: Communities Service

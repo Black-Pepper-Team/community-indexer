@@ -1,0 +1,15 @@
+type: object
+required:
+  - id
+  - name
+  - contract_address
+properties:
+  id:
+    type: string
+    format: string
+    description: Unique identifier of the community
+    example: f0e87cdf-53f6-40fb-b778-a5793b87fa01
+  name:
+    type: string
+    format: string
+    description: Community name

@@ -20,6 +20,10 @@ import (
 	"github.com/black-pepper-team/community-indexer/internal/data/postgres"
 )
 
+var (
+	ErrContractNotFound = fmt.Errorf("contract not found")
+)
+
 type Core struct {
 	log *logan.Entry
 	db  data.MasterQ
@@ -92,6 +96,7 @@ func (c *Core) CreateCommunity(
 		ID:              communityId,
 		Status:          data.Deploying,
 		Name:            collectionName,
+		Symbol:          collectionSymbol,
 		ContractAddress: address,
 		OwnerAddress:    c.address,
 	}
@@ -123,4 +128,58 @@ func (c *Core) CreateCommunity(
 	}()
 
 	return &newCommunity, nil
+}
+
+func (c *Core) ImportCommunity(contractAddress common.Address) (*data.Community, error) {
+	existedCommunity, err := c.db.CommunitiesQ().WhereContractAddress(contractAddress).Get()
+	if err != nil {
+		return nil, fmt.Errorf("failed to get community by contract address: %w", err)
+	}
+
+	if existedCommunity != nil {
+		return existedCommunity, nil
+	}
+
+	collectionContract, err := contracts.NewERC721Mock(contractAddress, c.ethClient)
+	if err != nil {
+		return nil, fmt.Errorf("failed to get ERC721 contract: %w", err)
+	}
+
+	collectionName, err := collectionContract.Name(nil)
+	if err != nil {
+		// Assume that the contract doesn't exists
+		return nil, ErrContractNotFound
+	}
+
+	collectionSymbol, err := collectionContract.Symbol(nil)
+	if err != nil {
+		// Assume that the contract doesn't exists
+		return nil, ErrContractNotFound
+	}
+
+	contractOwner, err := collectionContract.Owner(nil)
+	if err != nil {
+		// Assume that the contract doesn't exists
+		return nil, ErrContractNotFound
+	}
+
+	communityId, err := uuid.NewRandom()
+	if err != nil {
+		return nil, fmt.Errorf("failed to generate new UUID: %w", err)
+	}
+
+	newCommunity := &data.Community{
+		ID:              communityId,
+		Status:          data.Ready,
+		Name:            collectionName,
+		Symbol:          collectionSymbol,
+		ContractAddress: contractAddress,
+		OwnerAddress:    contractOwner,
+	}
+
+	if err = c.db.New().CommunitiesQ().Insert(newCommunity); err != nil {
+		return nil, fmt.Errorf("failed to insert new community: %w", err)
+	}
+
+	return newCommunity, nil
 }

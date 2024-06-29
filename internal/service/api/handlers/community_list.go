@@ -18,7 +18,7 @@ func CommunityList(w http.ResponseWriter, r *http.Request) {
 	communitiesList, err := Core(r).GetCommunitiesList()
 	if err != nil {
 		Log(r).WithError(err).
-			Error("Failed get communities list")
+			Error("Failed get community list")
 		ape.RenderErr(w, problems.InternalError())
 		return
 	}

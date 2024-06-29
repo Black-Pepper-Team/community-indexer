@@ -22,6 +22,7 @@ type Community struct {
 	ID              uuid.UUID       `db:"id"               structs:"id"`
 	Status          CommunityStatus `db:"status"           structs:"status"`
 	Name            string          `db:"name"             structs:"name"`
+	Symbol          string          `db:"symbol"           structs:"symbol"`
 	ContractAddress common.Address  `db:"contract_address" structs:"contract_address"`
 	OwnerAddress    common.Address  `db:"owner_address"    structs:"owner_address"`
 }

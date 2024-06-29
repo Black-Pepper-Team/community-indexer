@@ -18,6 +18,7 @@ func NewCommunitiesList(communities []data.Community) *CommunitiesList {
 			ID:              community.ID,
 			Status:          string(community.Status),
 			Name:            community.Name,
+			Symbol:          community.Symbol,
 			ContractAddress: community.ContractAddress,
 			OwnerAddress:    community.OwnerAddress,
 		})
@@ -34,6 +35,7 @@ func MockedCommunitiesList() *CommunitiesList {
 			{
 				ID:              uuid.MustParse("00000000-0000-0000-0000-000000000001"),
 				Name:            "Community 1",
+				Symbol:          "COM1",
 				ContractAddress: common.HexToAddress("0x1"),
 				OwnerAddress:    common.HexToAddress("0x100"),
 				Status:          "ready",
@@ -41,6 +43,7 @@ func MockedCommunitiesList() *CommunitiesList {
 			{
 				ID:              uuid.MustParse("00000000-0000-0000-0000-000000000002"),
 				Name:            "Community 2",
+				Symbol:          "COM2",
 				ContractAddress: common.HexToAddress("0x2"),
 				OwnerAddress:    common.HexToAddress("0x200"),
 				Status:          "ready",
@@ -48,6 +51,7 @@ func MockedCommunitiesList() *CommunitiesList {
 			{
 				ID:              uuid.MustParse("00000000-0000-0000-0000-000000000003"),
 				Name:            "Community 3",
+				Symbol:          "COM3",
 				ContractAddress: common.HexToAddress("0x3"),
 				OwnerAddress:    common.HexToAddress("0x300"),
 				Status:          "deploying",
@@ -55,6 +59,7 @@ func MockedCommunitiesList() *CommunitiesList {
 			{
 				ID:              uuid.MustParse("00000000-0000-0000-0000-000000000004"),
 				Name:            "Community 4",
+				Symbol:          "COM4",
 				ContractAddress: common.HexToAddress("0x4"),
 				OwnerAddress:    common.HexToAddress("0x400"),
 				Status:          "deploy-failed",

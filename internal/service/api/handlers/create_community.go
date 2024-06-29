@@ -26,7 +26,7 @@ func CreateCommunity(w http.ResponseWriter, r *http.Request) {
 	newCommunity, err := Core(r).CreateCommunity(req.CollectionName, req.CollectionSymbol)
 	if err != nil {
 		Log(r).WithError(err).
-			Error("Failed get communities list")
+			Error("Failed create community")
 		ape.RenderErr(w, problems.InternalError())
 		return
 	}

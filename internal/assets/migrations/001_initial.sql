@@ -5,6 +5,7 @@ CREATE TABLE communities(
     status           VARCHAR(256)             NOT NULL,
     contract_address BYTEA                    NOT NULL,
     name             VARCHAR(256)             NOT NULL,
+    symbol           VARCHAR(256)             NOT NULL,
     owner_address    BYTEA                    NOT NULL
 );
 

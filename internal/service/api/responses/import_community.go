@@ -1,21 +1,38 @@
 package responses
 
 import (
+	"github.com/ethereum/go-ethereum/common"
 	"github.com/google/uuid"
+
+	"github.com/black-pepper-team/community-indexer/internal/data"
 )
 
 type ImportCommunity struct {
-	ID uuid.UUID `json:"id"`
+	Community Community `json:"community"`
 }
 
-func NewImportCommunity(id uuid.UUID) *ImportCommunity {
+func NewImportCommunity(community *data.Community) *ImportCommunity {
 	return &ImportCommunity{
-		ID: id,
+		Community: Community{
+			ID:              community.ID,
+			Status:          string(community.Status),
+			Name:            community.Name,
+			Symbol:          community.Symbol,
+			ContractAddress: community.ContractAddress,
+			OwnerAddress:    community.OwnerAddress,
+		},
 	}
 }
 
 func MockedImportCommunity() *ImportCommunity {
 	return &ImportCommunity{
-		ID: uuid.MustParse("00000000-0000-0000-0000-000000000002"),
+		Community: Community{
+			ID:              uuid.MustParse("00000000-0000-0000-0000-000000000003"),
+			Status:          "ready",
+			Name:            "Community 3",
+			Symbol:          "COM3",
+			ContractAddress: common.HexToAddress("0x3"),
+			OwnerAddress:    common.HexToAddress("0x300"),
+		},
 	}
 }

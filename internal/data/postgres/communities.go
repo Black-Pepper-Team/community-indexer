@@ -66,10 +66,7 @@ func (q *communitiesQ) Get() (*data.Community, error) {
 }
 
 func (q *communitiesQ) Insert(community *data.Community) error {
-	err := q.db.Get(&community.ID,
-		sq.Insert(committedStatesTableName).
-			SetMap(structs.Map(community)),
-	)
+	err := q.db.Exec(sq.Insert(committedStatesTableName).SetMap(structs.Map(community)))
 	if err != nil {
 		return errors.Wrap(err, "failed to insert rows")
 	}

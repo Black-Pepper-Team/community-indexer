@@ -23,7 +23,7 @@ func CreateCommunity(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	communityId, err := Core(r).CreateCommunity(req.OwnerAddress, req.CollectionName, req.CollectionSymbol)
+	newCommunity, err := Core(r).CreateCommunity(req.CollectionName, req.CollectionSymbol)
 	if err != nil {
 		Log(r).WithError(err).
 			Error("Failed get communities list")
@@ -31,5 +31,5 @@ func CreateCommunity(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	ape.Render(w, responses.NewCommunitiesList(communityId))
+	ape.Render(w, responses.NewCreateCommunity(newCommunity))
 }

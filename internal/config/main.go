@@ -13,6 +13,9 @@ type Config interface {
 	pgdb.Databaser
 	types.Copuser
 	comfig.Listenerer
+
+	EthClient() *EthClientConfig
+	API() *APIConfig
 }
 
 type config struct {
@@ -21,6 +24,9 @@ type config struct {
 	types.Copuser
 	comfig.Listenerer
 	getter kv.Getter
+
+	ethClient comfig.Once
+	api       comfig.Once
 }
 
 func New(getter kv.Getter) Config {

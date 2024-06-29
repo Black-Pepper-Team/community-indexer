@@ -9,7 +9,7 @@ import (
 	"github.com/black-pepper-team/community-indexer/internal/service/api/responses"
 )
 
-func CommunitiesList(w http.ResponseWriter, r *http.Request) {
+func CommunityList(w http.ResponseWriter, r *http.Request) {
 	if MockAPI(r) {
 		ape.Render(w, responses.MockedCommunitiesList())
 		return

@@ -15,10 +15,12 @@ type CommunitiesQ interface {
 
 	WhereID(...uuid.UUID) CommunitiesQ
 	WhereContractAddress(...common.Address) CommunitiesQ
+	WhereOwnerAddress(...common.Address) CommunitiesQ
 }
 
 type Community struct {
 	ID              uuid.UUID      `db:"id"               structs:"id"`
 	Name            string         `db:"name"             structs:"name"`
 	ContractAddress common.Address `db:"contract_address" structs:"contract_address"`
+	OwnerAddress    common.Address `db:"owner_address"    structs:"owner_address"`
 }

@@ -1,11 +1,18 @@
 package cli
 
 import (
+	"context"
+	"os"
+	"os/signal"
+	"sync"
+	"syscall"
+
 	"github.com/alecthomas/kingpin"
-	"github.com/black-pepper-team/community-indexer/internal/config"
-	"github.com/black-pepper-team/community-indexer/internal/service"
 	"gitlab.com/distributed_lab/kit/kv"
 	"gitlab.com/distributed_lab/logan/v3"
+
+	"github.com/black-pepper-team/community-indexer/internal/config"
+	"github.com/black-pepper-team/community-indexer/internal/service/api"
 )
 
 func Run(args []string) bool {
@@ -20,16 +27,14 @@ func Run(args []string) bool {
 	cfg := config.New(kv.MustFromEnv())
 	log = cfg.Log()
 
-	app := kingpin.New("community-indexer", "")
+	app := kingpin.New("service", "")
 
 	runCmd := app.Command("run", "run command")
-	serviceCmd := runCmd.Command("service", "run service") // you can insert custom help
+	serviceCmd := runCmd.Command("service", "run service")
 
 	migrateCmd := app.Command("migrate", "migrate command")
 	migrateUpCmd := migrateCmd.Command("up", "migrate db up")
 	migrateDownCmd := migrateCmd.Command("down", "migrate db down")
-
-	// custom commands go here...
 
 	cmd, err := app.Parse(args[1:])
 	if err != nil {
@@ -37,21 +42,58 @@ func Run(args []string) bool {
 		return false
 	}
 
+	wg := new(sync.WaitGroup)
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
 	switch cmd {
 	case serviceCmd.FullCommand():
-		service.Run(cfg)
+		run(wg, ctx, cfg, api.Run)
 	case migrateUpCmd.FullCommand():
 		err = MigrateUp(cfg)
 	case migrateDownCmd.FullCommand():
 		err = MigrateDown(cfg)
-	// handle any custom commands here in the same way
 	default:
 		log.Errorf("unknown command %s", cmd)
+		cancel()
 		return false
 	}
 	if err != nil {
 		log.WithError(err).Error("failed to exec cmd")
+		cancel()
 		return false
 	}
+
+	graceful := make(chan os.Signal, 1)
+	signal.Notify(graceful, os.Interrupt, syscall.SIGTERM)
+
+	waitGroupChannel := make(chan struct{})
+	go func() {
+		wg.Wait()
+		close(waitGroupChannel)
+	}()
+
+	select {
+	case <-waitGroupChannel:
+		log.Info("all services stopped")
+		cancel()
+	case <-graceful:
+		log.Info("got signal to stop gracefully")
+		cancel()
+		<-waitGroupChannel
+	}
+
 	return true
+}
+
+func run(
+	wg *sync.WaitGroup, ctx context.Context,
+	cfg config.Config, runner func(context.Context, config.Config),
+) {
+	wg.Add(1)
+	go func() {
+		defer wg.Done()
+
+		runner(ctx, cfg)
+	}()
 }

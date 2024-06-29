@@ -8,14 +8,14 @@ type ImportCommunity struct {
 	ID uuid.UUID `json:"id"`
 }
 
-func NewImportCommunity(id uuid.UUID) *CreateCommunity {
-	return &CreateCommunity{
+func NewImportCommunity(id uuid.UUID) *ImportCommunity {
+	return &ImportCommunity{
 		ID: id,
 	}
 }
 
-func MockedImportCommunity() *CreateCommunity {
-	return &CreateCommunity{
+func MockedImportCommunity() *ImportCommunity {
+	return &ImportCommunity{
 		ID: uuid.MustParse("00000000-0000-0000-0000-000000000002"),
 	}
 }

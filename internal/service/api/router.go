@@ -1,10 +1,10 @@
-package service
+package api
 
 import (
 	"github.com/go-chi/chi"
 	"gitlab.com/distributed_lab/ape"
 
-	"github.com/black-pepper-team/community-indexer/internal/service/handlers"
+	"github.com/black-pepper-team/community-indexer/internal/service/api/handlers"
 )
 
 func (s *service) router() chi.Router {
@@ -15,10 +15,17 @@ func (s *service) router() chi.Router {
 		ape.LoganMiddleware(s.log),
 		ape.CtxMiddleware(
 			handlers.CtxLog(s.log),
+			handlers.CtxCore(s.core),
+			handlers.CtxMockAPI(s.mockAPI),
 		),
 	)
 	r.Route("/integrations/community-indexer/v1", func(r chi.Router) {
-		r.Get("/communities", handlers.Communities)
+		r.Route("/community", func(r chi.Router) {
+			r.Get("/{community-id}", handlers.GetCommunity)
+			r.Post("/", handlers.CreateCommunity)
+			r.Get("/list", handlers.CommunityList)
+			r.Post("/import", handlers.ImportCommunity)
+		})
 	})
 
 	return r

@@ -18,6 +18,7 @@ const (
 
 	idColumnName              = "id"
 	contractAddressColumnName = "contract_address"
+	ownerAddressColumnName    = "owner_address"
 )
 
 type communitiesQ struct {
@@ -25,7 +26,7 @@ type communitiesQ struct {
 	sel sq.SelectBuilder
 }
 
-func NewCommittedStateQ(db *pgdb.DB) data.CommunitiesQ {
+func NewCommunitiesQ(db *pgdb.DB) data.CommunitiesQ {
 	return &communitiesQ{
 		db:  db,
 		sel: sq.Select("*").From(committedStatesTableName),
@@ -33,7 +34,7 @@ func NewCommittedStateQ(db *pgdb.DB) data.CommunitiesQ {
 }
 
 func (q *communitiesQ) New() data.CommunitiesQ {
-	return NewCommittedStateQ(q.db.Clone())
+	return NewCommunitiesQ(q.db.Clone())
 }
 
 func (q *communitiesQ) Select() ([]data.Community, error) {
@@ -96,5 +97,10 @@ func (q *communitiesQ) WhereID(id ...uuid.UUID) data.CommunitiesQ {
 
 func (q *communitiesQ) WhereContractAddress(address ...common.Address) data.CommunitiesQ {
 	q.sel = q.sel.Where(sq.Eq{contractAddressColumnName: address})
+	return q
+}
+
+func (q *communitiesQ) WhereOwnerAddress(address ...common.Address) data.CommunitiesQ {
+	q.sel = q.sel.Where(sq.Eq{ownerAddressColumnName: address})
 	return q
 }

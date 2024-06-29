@@ -63,6 +63,20 @@ func (c *Core) GetCommunitiesList() ([]data.Community, error) {
 	return communities, nil
 }
 
+func (c *Core) GetCommunityById(communityId uuid.UUID) (*data.Community, error) {
+	community, err := c.db.New().CommunitiesQ().WhereID(communityId).Get()
+	if err != nil {
+		c.log.WithError(err).Error("Failed to get community by ID")
+		return nil, err
+	}
+
+	if community == nil {
+		return nil, nil
+	}
+
+	return community, nil
+}
+
 func (c *Core) CreateCommunity(
 	collectionName string,
 	collectionSymbol string,

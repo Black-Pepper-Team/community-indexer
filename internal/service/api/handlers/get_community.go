@@ -23,13 +23,19 @@ func GetCommunity(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	communitiesList, err := Core(r).GetCommunitiesList()
-	if err != nil {
+	community, err := Core(r).GetCommunityById(req.CommunityID)
+	switch {
+	case community == nil:
+		ape.RenderErr(w, problems.NotFound())
 		Log(r).WithError(err).
-			Error("Failed get community")
+			Debug("Community not found")
+		return
+	case err != nil:
+		Log(r).WithError(err).
+			Error("Failed tp get community")
 		ape.RenderErr(w, problems.InternalError())
 		return
 	}
 
-	ape.Render(w, responses.NewCommunitiesList(communitiesList))
+	ape.Render(w, responses.NewGetCommunity(community))
 }

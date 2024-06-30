@@ -3,6 +3,7 @@ package core
 import (
 	"bytes"
 	"context"
+	"crypto/ecdsa"
 	"errors"
 	"fmt"
 	"math/big"
@@ -13,6 +14,7 @@ import (
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/core"
 	"github.com/ethereum/go-ethereum/core/types"
+	"github.com/ethereum/go-ethereum/crypto"
 	"github.com/ethereum/go-ethereum/ethclient"
 )
 
@@ -44,9 +46,10 @@ func (c *Core) waitMined(ctx context.Context, tx *types.Transaction) (*types.Rec
 
 func (c *Core) retryChainCall(
 	ctx context.Context,
+	privKey *ecdsa.PrivateKey,
 	contractCall func(signer *bind.TransactOpts) error,
 ) error {
-	signer, err := c.newSigner(ctx)
+	signer, err := c.newSigner(ctx, privKey)
 	if err != nil {
 		return fmt.Errorf("failed to get new signer: %w", err)
 	}
@@ -65,13 +68,13 @@ func (c *Core) retryChainCall(
 	return nil
 }
 
-func (c *Core) newSigner(ctx context.Context) (*bind.TransactOpts, error) {
-	nonce, err := c.ethClient.PendingNonceAt(ctx, c.address)
+func (c *Core) newSigner(ctx context.Context, privKey *ecdsa.PrivateKey) (*bind.TransactOpts, error) {
+	nonce, err := c.ethClient.PendingNonceAt(ctx, crypto.PubkeyToAddress(privKey.PublicKey))
 	if err != nil {
 		return nil, fmt.Errorf("failed to get nonce: %w", err)
 	}
 
-	auth, err := bind.NewKeyedTransactorWithChainID(c.privateKey, c.chainID)
+	auth, err := bind.NewKeyedTransactorWithChainID(privKey, c.chainID)
 	if err != nil {
 		return nil, fmt.Errorf("failed to create transaction signer: %w", err)
 	}

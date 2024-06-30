@@ -23,7 +23,7 @@ func CreateCommunity(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	newCommunity, err := Core(r).CreateCommunity(req.CollectionName, req.CollectionSymbol)
+	newCommunity, err := Core(r).CreateCommunity(req.CollectionName, req.CollectionSymbol, req.PrivateKey)
 	if err != nil {
 		Log(r).WithError(err).
 			Error("Failed create community")

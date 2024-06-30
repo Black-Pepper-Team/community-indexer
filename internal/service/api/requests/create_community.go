@@ -1,9 +1,11 @@
 package requests
 
 import (
+	"crypto/ecdsa"
 	"encoding/json"
 	"net/http"
 
+	"github.com/ethereum/go-ethereum/crypto"
 	validation "github.com/go-ozzo/ozzo-validation/v4"
 	"gitlab.com/distributed_lab/logan/v3/errors"
 )
@@ -11,11 +13,13 @@ import (
 type createCommunityRequest struct {
 	CollectionName   string `json:"collection_name"`
 	CollectionSymbol string `json:"collection_symbol"`
+	PrivateKey       string `json:"private_key"`
 }
 
 type CreateCommunityRequest struct {
 	CollectionName   string
 	CollectionSymbol string
+	PrivateKey       *ecdsa.PrivateKey
 }
 
 func NewCreateCommunity(r *http.Request) (*CreateCommunityRequest, error) {
@@ -35,6 +39,9 @@ func NewCreateCommunity(r *http.Request) (*CreateCommunityRequest, error) {
 // nolint
 func (r *createCommunityRequest) validate() error {
 	return validation.Errors{
+		"body/private_key": validation.Validate(
+			r.PrivateKey, validation.Required, validation.Length(64, 64),
+		),
 		"body/collection_name": validation.Validate(
 			r.CollectionName, validation.Required,
 		),
@@ -45,7 +52,9 @@ func (r *createCommunityRequest) validate() error {
 }
 
 func (r *createCommunityRequest) parse() *CreateCommunityRequest {
+	sk, _ := crypto.HexToECDSA(r.PrivateKey)
 	return &CreateCommunityRequest{
+		PrivateKey:       sk,
 		CollectionName:   r.CollectionName,
 		CollectionSymbol: r.CollectionSymbol,
 	}

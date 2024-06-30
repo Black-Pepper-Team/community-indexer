@@ -74,6 +74,7 @@ func New(ctx context.Context, cfg config.Config) (*Core, error) {
 		circuits:            circuits,
 		chatContract:        chatContract,
 		authStorageContract: authStorageContract,
+		registerRequests:    make(map[uuid.UUID]*RegisterRequest),
 		registeredUsers:     make(RegisterStorage),
 	}, nil
 }

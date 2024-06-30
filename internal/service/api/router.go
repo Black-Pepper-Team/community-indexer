@@ -27,6 +27,7 @@ func (s *service) router() chi.Router {
 			r.Post("/import", handlers.ImportCommunity)
 			r.Post("/register", handlers.RegisterInCommunity)
 			r.Get("/register/{register-id}", handlers.GetRegisterStatus)
+			r.Post("/add-participant", handlers.AddCommunityParticipant)
 		})
 	})
 

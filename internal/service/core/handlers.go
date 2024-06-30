@@ -1,6 +1,7 @@
 package core
 
 import (
+	"crypto/ecdsa"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -11,6 +12,7 @@ import (
 	"github.com/ethereum/go-ethereum/accounts/abi/bind"
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/core/types"
+	"github.com/ethereum/go-ethereum/crypto"
 	"github.com/google/uuid"
 	"github.com/iden3/go-iden3-crypto/babyjub"
 	"github.com/iden3/go-rapidsnark/prover"
@@ -53,16 +55,12 @@ func (c *Core) GetCommunityById(communityId uuid.UUID) (*data.Community, error) 
 func (c *Core) CreateCommunity(
 	collectionName string,
 	collectionSymbol string,
+	privKey *ecdsa.PrivateKey,
 ) (*data.Community, error) {
 	var err error
 	var tx *types.Transaction
 	var address common.Address
-	err = c.retryChainCall(c.ctx, func(signer *bind.TransactOpts) error {
-		signer, err := c.newSigner(c.ctx)
-		if err != nil {
-			return fmt.Errorf("failed to get new signer: %w", err)
-		}
-
+	err = c.retryChainCall(c.ctx, privKey, func(signer *bind.TransactOpts) error {
 		address, tx, _, err = contracts.DeployERC721Mock(signer, c.ethClient, collectionName, collectionSymbol)
 		if err != nil {
 			return fmt.Errorf("failed to deploy new community: %w", err)
@@ -85,7 +83,7 @@ func (c *Core) CreateCommunity(
 		Name:            collectionName,
 		Symbol:          collectionSymbol,
 		ContractAddress: address,
-		OwnerAddress:    c.address,
+		OwnerAddress:    crypto.PubkeyToAddress(privKey.PublicKey),
 	}
 
 	if err = c.db.New().CommunitiesQ().Insert(&newCommunity); err != nil {
@@ -244,12 +242,7 @@ func (c *Core) RegisterInCommunity(
 	}
 
 	var tx *types.Transaction
-	err = c.retryChainCall(c.ctx, func(signer *bind.TransactOpts) error {
-		signer, err := c.newSigner(c.ctx)
-		if err != nil {
-			return fmt.Errorf("failed to get new signer: %w", err)
-		}
-
+	err = c.retryChainCall(c.ctx, c.privateKey, func(signer *bind.TransactOpts) error {
 		tx, err = c.authStorageContract.Register(
 			signer,
 			contractId,
@@ -321,4 +314,66 @@ func (c *Core) GetRegister(registerRequestId uuid.UUID) (*RegisterRequest, error
 	}
 
 	return registerRequest, nil
+}
+
+func (c *Core) AddCommunityParticipant(
+	privKey *ecdsa.PrivateKey,
+	participantAddress common.Address,
+	contractAddress common.Address,
+) (*RegisterRequest, error) {
+	community, err := c.db.CommunitiesQ().WhereContractAddress(contractAddress).Get()
+	if err != nil {
+		return nil, fmt.Errorf("failed to get community by contract address: %w", err)
+	}
+
+	if community == nil {
+		return nil, ErrContractNotFound
+	}
+
+	collectionContract, err := contracts.NewERC721Mock(contractAddress, c.ethClient)
+	if err != nil {
+		return nil, fmt.Errorf("failed to get ERC721 contract: %w", err)
+	}
+
+	var tx *types.Transaction
+	err = c.retryChainCall(c.ctx, privKey, func(signer *bind.TransactOpts) error {
+		newRandId := babyjub.NewRandPrivKey()
+		tx, err = collectionContract.Mint(signer, participantAddress, (newRandId).Scalar().BigInt())
+		if err != nil {
+			return fmt.Errorf("failed to call Register: %w", err)
+		}
+
+		return nil
+	})
+	if err != nil {
+		return nil, fmt.Errorf("failed to call retryChainCall: %w", err)
+	}
+
+	requestId := uuid.New()
+	mintRequest := RegisterRequest{
+		Id:     requestId,
+		Status: Processing,
+	}
+
+	c.registerRequests[requestId] = &mintRequest
+
+	go func() {
+		nextStatus := Registered
+
+		if _, err := c.waitMined(c.ctx, tx); err != nil {
+			c.log.
+				WithField("tx-hash", tx.Hash().Hex()).
+				WithField("reason", err).
+				Errorf("failed to wait tx mined")
+
+			nextStatus = FailedRegister
+		}
+
+		mintRequest.Status = nextStatus
+		c.registerRequests[requestId] = &mintRequest
+
+		return
+	}()
+
+	return &mintRequest, nil
 }

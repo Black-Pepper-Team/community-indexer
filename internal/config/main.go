@@ -16,6 +16,7 @@ type Config interface {
 
 	EthClient() *EthClientConfig
 	API() *APIConfig
+	Circom() *CircomConfig
 }
 
 type config struct {
@@ -27,6 +28,7 @@ type config struct {
 
 	ethClient comfig.Once
 	api       comfig.Once
+	circom    comfig.Once
 }
 
 func New(getter kv.Getter) Config {

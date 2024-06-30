@@ -6,9 +6,7 @@ import (
 	"fmt"
 	"math/big"
 
-	"github.com/ethereum/go-ethereum/accounts/abi/bind"
 	"github.com/ethereum/go-ethereum/common"
-	"github.com/ethereum/go-ethereum/core/types"
 	"github.com/ethereum/go-ethereum/crypto"
 	"github.com/ethereum/go-ethereum/ethclient"
 	"github.com/google/uuid"
@@ -20,8 +18,9 @@ import (
 	"github.com/black-pepper-team/community-indexer/internal/data/postgres"
 )
 
-var (
-	ErrContractNotFound = fmt.Errorf("contract not found")
+const (
+	VerifiableCommitmentCircuitName = "VerifiableCommitment"
+	PostMessageCircuitName          = "PostMessage"
 )
 
 type Core struct {
@@ -34,6 +33,13 @@ type Core struct {
 	privateKey *ecdsa.PrivateKey
 	chainID    *big.Int
 	address    common.Address
+
+	authStorageContract *contracts.AuthenticationStorage
+	chatContract        *contracts.Chat
+	registerRequests    map[uuid.UUID]RegisterRequest
+	registeredUsers     RegisterStorage
+
+	circuits Circuits
 }
 
 func New(ctx context.Context, cfg config.Config) (*Core, error) {
@@ -42,158 +48,61 @@ func New(ctx context.Context, cfg config.Config) (*Core, error) {
 		return nil, fmt.Errorf("failed to get chainID: %w", err)
 	}
 
+	circuits, err := readCircuits(cfg.Circom().PathToCircuits)
+	if err != nil {
+		return nil, fmt.Errorf("failed to read state transition circuits: %w", err)
+	}
+
+	authStorageContract, err := contracts.NewAuthenticationStorage(
+		cfg.EthClient().AuthStorageContract,
+		cfg.EthClient().EthClient,
+	)
+
+	chatContract, err := contracts.NewChat(
+		cfg.EthClient().ChatContract,
+		cfg.EthClient().EthClient,
+	)
+
 	return &Core{
-		log:        cfg.Log(),
-		ctx:        ctx,
-		db:         postgres.NewMasterQ(cfg.DB()),
-		ethClient:  cfg.EthClient().EthClient,
-		privateKey: cfg.EthClient().PrivateKey,
-		address:    crypto.PubkeyToAddress(cfg.EthClient().PrivateKey.PublicKey),
-		chainID:    chainID,
+		log:                 cfg.Log(),
+		ctx:                 ctx,
+		db:                  postgres.NewMasterQ(cfg.DB()),
+		ethClient:           cfg.EthClient().EthClient,
+		privateKey:          cfg.EthClient().PrivateKey,
+		address:             crypto.PubkeyToAddress(cfg.EthClient().PrivateKey.PublicKey),
+		chainID:             chainID,
+		circuits:            circuits,
+		chatContract:        chatContract,
+		authStorageContract: authStorageContract,
+		registeredUsers:     make(RegisterStorage),
 	}, nil
 }
 
-func (c *Core) GetCommunitiesList() ([]data.Community, error) {
-	communities, err := c.db.New().CommunitiesQ().Select()
-	if err != nil {
-		c.log.WithError(err).Error("Failed to get communities list")
-		return nil, err
-	}
-
-	return communities, nil
-}
-
-func (c *Core) GetCommunityById(communityId uuid.UUID) (*data.Community, error) {
-	community, err := c.db.New().CommunitiesQ().WhereID(communityId).Get()
-	if err != nil {
-		c.log.WithError(err).Error("Failed to get community by ID")
-		return nil, err
-	}
-
-	if community == nil {
-		return nil, nil
-	}
-
-	return community, nil
-}
-
-func (c *Core) CreateCommunity(
-	collectionName string,
-	collectionSymbol string,
-) (*data.Community, error) {
+func readCircuits(pathToCircuits string) (Circuits, error) {
 	var err error
-	var tx *types.Transaction
-	var address common.Address
-	err = c.retryChainCall(c.ctx, func(signer *bind.TransactOpts) error {
-		signer, err := c.newSigner(c.ctx)
-		if err != nil {
-			return fmt.Errorf("failed to get new signer: %w", err)
-		}
+	circuits := make(Circuits)
 
-		address, tx, _, err = contracts.DeployERC721Mock(signer, c.ethClient, collectionName, collectionSymbol)
-		if err != nil {
-			return fmt.Errorf("failed to deploy new community: %w", err)
-		}
-
-		return nil
-	})
+	circuits[VerifiableCommitmentCircuitName] = make(map[circuitKey][]byte)
+	circuits[VerifiableCommitmentCircuitName][ZKEY], err = ReadFileByPath(pathToCircuits, fmt.Sprintf("%s.zkey", VerifiableCommitmentCircuitName))
 	if err != nil {
-		return nil, fmt.Errorf("failed to call retryChainCall: %w", err)
+		return nil, fmt.Errorf("failed to read state transition circuit final: %w", err)
 	}
 
-	communityId, err := uuid.NewRandom()
+	circuits[PostMessageCircuitName] = make(map[circuitKey][]byte)
+	circuits[PostMessageCircuitName][ZKEY], err = ReadFileByPath(pathToCircuits, fmt.Sprintf("%s.zkey", PostMessageCircuitName))
 	if err != nil {
-		return nil, fmt.Errorf("failed to generate new UUID: %w", err)
+		return nil, fmt.Errorf("failed to read state transition circuit wasm: %w", err)
 	}
 
-	newCommunity := data.Community{
-		ID:              communityId,
-		Status:          data.Deploying,
-		Name:            collectionName,
-		Symbol:          collectionSymbol,
-		ContractAddress: address,
-		OwnerAddress:    c.address,
-	}
-
-	if err = c.db.New().CommunitiesQ().Insert(&newCommunity); err != nil {
-		return nil, fmt.Errorf("failed to insert new community: %w", err)
-	}
-
-	go func() {
-		nextStatus := data.Ready
-
-		if _, err := c.waitMined(c.ctx, tx); err != nil {
-			c.log.
-				WithField("tx-hash", tx.Hash().Hex()).
-				WithField("reason", err).
-				Errorf("failed to wait tx mined")
-
-			nextStatus = data.FailedToDeploy
-		}
-
-		newCommunity.Status = nextStatus
-		if newErr := c.db.New().CommunitiesQ().Update(&newCommunity); newErr != nil {
-			c.log.
-				WithField("reason", newErr.Error()).
-				Errorf("failed to update the community status to failed community")
-		}
-
-		return
-	}()
-
-	return &newCommunity, nil
-}
-
-func (c *Core) ImportCommunity(contractAddress common.Address) (*data.Community, error) {
-	existedCommunity, err := c.db.CommunitiesQ().WhereContractAddress(contractAddress).Get()
+	circuits[VerifiableCommitmentCircuitName][WASM], err = ReadFileByPath(pathToCircuits, fmt.Sprintf("%s.wasm", VerifiableCommitmentCircuitName))
 	if err != nil {
-		return nil, fmt.Errorf("failed to get community by contract address: %w", err)
+		return nil, fmt.Errorf("failed to read state transition circuit final: %w", err)
 	}
 
-	if existedCommunity != nil {
-		return existedCommunity, nil
-	}
-
-	collectionContract, err := contracts.NewERC721Mock(contractAddress, c.ethClient)
+	circuits[PostMessageCircuitName][WASM], err = ReadFileByPath(pathToCircuits, fmt.Sprintf("%s.wasm", PostMessageCircuitName))
 	if err != nil {
-		return nil, fmt.Errorf("failed to get ERC721 contract: %w", err)
+		return nil, fmt.Errorf("failed to read state transition circuit wasm: %w", err)
 	}
 
-	collectionName, err := collectionContract.Name(nil)
-	if err != nil {
-		// Assume that the contract doesn't exists
-		return nil, ErrContractNotFound
-	}
-
-	collectionSymbol, err := collectionContract.Symbol(nil)
-	if err != nil {
-		// Assume that the contract doesn't exists
-		return nil, ErrContractNotFound
-	}
-
-	contractOwner, err := collectionContract.Owner(nil)
-	if err != nil {
-		// Assume that the contract doesn't exists
-		return nil, ErrContractNotFound
-	}
-
-	communityId, err := uuid.NewRandom()
-	if err != nil {
-		return nil, fmt.Errorf("failed to generate new UUID: %w", err)
-	}
-
-	newCommunity := &data.Community{
-		ID:              communityId,
-		Status:          data.Ready,
-		Name:            collectionName,
-		Symbol:          collectionSymbol,
-		ContractAddress: contractAddress,
-		OwnerAddress:    contractOwner,
-	}
-
-	if err = c.db.New().CommunitiesQ().Insert(newCommunity); err != nil {
-		return nil, fmt.Errorf("failed to insert new community: %w", err)
-	}
-
-	return newCommunity, nil
+	return circuits, nil
 }

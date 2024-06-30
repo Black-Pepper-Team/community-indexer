@@ -3,6 +3,7 @@ package config
 import (
 	"crypto/ecdsa"
 
+	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/crypto"
 	"github.com/ethereum/go-ethereum/ethclient"
 	"gitlab.com/distributed_lab/figure"
@@ -11,13 +12,17 @@ import (
 )
 
 type EthClientConfig struct {
-	EthClient  *ethclient.Client
-	PrivateKey *ecdsa.PrivateKey
+	EthClient           *ethclient.Client
+	PrivateKey          *ecdsa.PrivateKey
+	AuthStorageContract common.Address
+	ChatContract        common.Address
 }
 
 type ethClientConfigRaw struct {
-	RpcURL     string `fig:"rpc_url,required"` //nolint
-	PrivateKey string `fig:"private_key,required"`
+	RpcURL              string `fig:"rpc_url,required"` //nolint
+	PrivateKey          string `fig:"private_key,required"`
+	AuthStorageContract string `fig:"auth_storage_contract,required"`
+	ChatContract        string `fig:"chat_contract,required"`
 }
 
 func (c *config) EthClient() *EthClientConfig {
@@ -42,8 +47,10 @@ func (c *config) EthClient() *EthClientConfig {
 		}
 
 		return &EthClientConfig{
-			EthClient:  ethClient,
-			PrivateKey: privateKey,
+			EthClient:           ethClient,
+			PrivateKey:          privateKey,
+			AuthStorageContract: common.HexToAddress(configRaw.AuthStorageContract),
+			ChatContract:        common.HexToAddress(configRaw.ChatContract),
 		}
 	}).(*EthClientConfig)
 }

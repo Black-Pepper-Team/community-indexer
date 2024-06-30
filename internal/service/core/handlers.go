@@ -183,7 +183,7 @@ func (c *Core) RegisterInCommunity(
 			registryRequest := c.registerRequests[*registerId]
 
 			if registryRequest.Status == Processing || registryRequest.Status == Registered {
-				return &registryRequest, nil
+				return registryRequest, nil
 			}
 		}
 	}
@@ -275,7 +275,7 @@ func (c *Core) RegisterInCommunity(
 		Status: Processing,
 	}
 
-	c.registerRequests[requestId] = registerRequest
+	c.registerRequests[requestId] = &registerRequest
 
 	if c.registeredUsers[nftOwner] == nil {
 		c.registeredUsers[nftOwner] = make(map[common.Address]*uuid.UUID)
@@ -295,7 +295,7 @@ func (c *Core) RegisterInCommunity(
 		}
 
 		registerRequest.Status = nextStatus
-		c.registerRequests[requestId] = registerRequest
+		c.registerRequests[requestId] = &registerRequest
 
 		return
 	}()
@@ -311,4 +311,14 @@ type VarifiableCommitmentInputs struct {
 	BabyJubJubPKAx string `json:"babyJubJubPK_Ax"`
 	BabyJubJubPKAy string `json:"babyJubJubPK_Ay"`
 	Timestamp      string `json:"timestamp"`
+}
+
+func (c *Core) GetRegister(registerRequestId uuid.UUID) (*RegisterRequest, error) {
+	registerRequest := c.registerRequests[registerRequestId]
+
+	if registerRequest == nil {
+		return nil, nil
+	}
+
+	return registerRequest, nil
 }

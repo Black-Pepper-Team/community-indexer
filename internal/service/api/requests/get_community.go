@@ -36,7 +36,7 @@ func NewGetCommunity(r *http.Request) (*GetCommunityRequest, error) {
 // nolint
 func (r *getCommunityRequest) validate() error {
 	return validation.Errors{
-		"path/{revocation-id}": validation.Validate(
+		"path/{community-id}": validation.Validate(
 			r.CommunityID, validation.Required, validation.By(MustBeValidUUID),
 		),
 	}.Filter()

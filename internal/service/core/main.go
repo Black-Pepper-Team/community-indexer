@@ -36,7 +36,7 @@ type Core struct {
 
 	authStorageContract *contracts.AuthenticationStorage
 	chatContract        *contracts.Chat
-	registerRequests    map[uuid.UUID]RegisterRequest
+	registerRequests    map[uuid.UUID]*RegisterRequest
 	registeredUsers     RegisterStorage
 
 	circuits Circuits

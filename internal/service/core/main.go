@@ -36,8 +36,10 @@ type Core struct {
 
 	authStorageContract *contracts.AuthenticationStorage
 	chatContract        *contracts.Chat
-	registerRequests    map[uuid.UUID]*RegisterRequest
-	registeredUsers     RegisterStorage
+	poseidonSMTContract *contracts.PoseidonSMT
+
+	registerRequests map[uuid.UUID]*RegisterRequest
+	registeredUsers  RegisterStorage
 
 	circuits Circuits
 }
@@ -63,6 +65,11 @@ func New(ctx context.Context, cfg config.Config) (*Core, error) {
 		cfg.EthClient().EthClient,
 	)
 
+	poseidonSMTContract, err := contracts.NewPoseidonSMT(
+		cfg.EthClient().PoseidonSMTContract,
+		cfg.EthClient().EthClient,
+	)
+
 	return &Core{
 		log:                 cfg.Log(),
 		ctx:                 ctx,
@@ -74,6 +81,7 @@ func New(ctx context.Context, cfg config.Config) (*Core, error) {
 		circuits:            circuits,
 		chatContract:        chatContract,
 		authStorageContract: authStorageContract,
+		poseidonSMTContract: poseidonSMTContract,
 		registerRequests:    make(map[uuid.UUID]*RegisterRequest),
 		registeredUsers:     make(RegisterStorage),
 	}, nil

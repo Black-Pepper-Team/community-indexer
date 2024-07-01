@@ -16,6 +16,7 @@ type EthClientConfig struct {
 	PrivateKey          *ecdsa.PrivateKey
 	AuthStorageContract common.Address
 	ChatContract        common.Address
+	PoseidonSMTContract common.Address
 }
 
 type ethClientConfigRaw struct {
@@ -23,6 +24,7 @@ type ethClientConfigRaw struct {
 	PrivateKey          string `fig:"private_key,required"`
 	AuthStorageContract string `fig:"auth_storage_contract,required"`
 	ChatContract        string `fig:"chat_contract,required"`
+	PoseidonSMTContract string `fig:"poseidon_smt,required"`
 }
 
 func (c *config) EthClient() *EthClientConfig {
@@ -51,6 +53,7 @@ func (c *config) EthClient() *EthClientConfig {
 			PrivateKey:          privateKey,
 			AuthStorageContract: common.HexToAddress(configRaw.AuthStorageContract),
 			ChatContract:        common.HexToAddress(configRaw.ChatContract),
+			PoseidonSMTContract: common.HexToAddress(configRaw.PoseidonSMTContract),
 		}
 	}).(*EthClientConfig)
 }

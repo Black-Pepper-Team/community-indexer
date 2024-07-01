@@ -1,21 +1,24 @@
 package requests
 
 import (
+	"crypto/ecdsa"
 	"encoding/json"
 	"math/big"
 	"net/http"
 
 	"github.com/ethereum/go-ethereum/common"
+	"github.com/ethereum/go-ethereum/crypto"
 	validation "github.com/go-ozzo/ozzo-validation/v4"
 	"github.com/iden3/go-iden3-crypto/babyjub"
 	"gitlab.com/distributed_lab/logan/v3/errors"
 )
 
 type registerInCommunityRequest struct {
-	NFTID        big.Int `json:"nft_id"`
-	NFTOwner     string  `json:"nft_owner"`
-	ContractId   string  `json:"contract_id"`
-	BJJPublicKey string  `json:"bjj_public_key"`
+	NFTID        string `json:"nft_id"`
+	NFTOwner     string `json:"nft_owner"`
+	ContractId   string `json:"contract_id"`
+	BJJPublicKey string `json:"bjj_public_key"`
+	PrivateKey   string `json:"private_key"`
 }
 
 type RegisterInCommunityRequest struct {
@@ -23,6 +26,7 @@ type RegisterInCommunityRequest struct {
 	NFTOwner     common.Address
 	ContractId   common.Address
 	BJJPublicKey babyjub.PublicKey
+	PrivateKey   *ecdsa.PrivateKey
 }
 
 func NewRegisterInCommunity(r *http.Request) (*RegisterInCommunityRequest, error) {
@@ -58,11 +62,15 @@ func (r *registerInCommunityRequest) parse() *RegisterInCommunityRequest {
 	var bjjPublicKey babyjub.PublicKey
 	(&bjjPublicKey).UnmarshalText([]byte(r.BJJPublicKey))
 
+	nftId, _ := new(big.Int).SetString(r.NFTID, 10)
+	sk, _ := crypto.HexToECDSA(r.PrivateKey)
+
 	return &RegisterInCommunityRequest{
-		NFTID:        r.NFTID,
+		NFTID:        *nftId,
 		NFTOwner:     common.HexToAddress(r.NFTOwner),
 		ContractId:   common.HexToAddress(r.ContractId),
 		BJJPublicKey: bjjPublicKey,
+		PrivateKey:   sk,
 	}
 }
 

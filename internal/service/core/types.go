@@ -12,8 +12,13 @@ import (
 	"github.com/black-pepper-team/community-indexer/contracts"
 )
 
+type Metadata struct {
+	CredentialID *big.Int
+	Id           *uuid.UUID
+}
+
 type Circuits map[string]map[circuitKey][]byte
-type RegisterStorage map[common.Address]map[common.Address]*uuid.UUID
+type RegisterStorage map[common.Address]map[common.Address]*Metadata
 
 type RegisterStatus string
 
@@ -22,6 +27,40 @@ const (
 	Processing     RegisterStatus = "processing"
 	FailedRegister RegisterStatus = "failed-register"
 )
+
+type VarifiableCommitmentInputs struct {
+	ContractId     string `json:"contractId"`
+	NftId          string `json:"nftId"`
+	NftOwner       string `json:"nftOwner"`
+	Deadline       string `json:"deadline"`
+	BabyJubJubPKAx string `json:"babyJubJubPK_Ax"`
+	BabyJubJubPKAy string `json:"babyJubJubPK_Ay"`
+	Timestamp      string `json:"timestamp"`
+}
+
+type PostMessageInputs struct {
+	ContractId string `json:"contractId"`
+	NftId      string `json:"nftId"`
+	NftOwner   string `json:"nftOwner"`
+	Timestamp  string `json:"timestamp"`
+
+	BabyJubJubPKAx string `json:"babyJubJubPK_Ax"`
+	BabyJubJubPKAy string `json:"babyJubJubPK_Ay"`
+
+	MessageHash              string `json:"messageHash"`
+	ExpectedMessageTimestamp string `json:"expectedMessageTimestamp"`
+
+	Root        string   `json:"root"`
+	Siblings    []string `json:"siblings"`
+	AuxKey      string   `json:"auxKey"`
+	AuxValue    string   `json:"auxValue"`
+	AuxIsEmpty  string   `json:"auxIsEmpty"`
+	IsExclusion string   `json:"isExclusion"`
+
+	MessageSignatureR8x string `json:"messageSignatureR8x"`
+	MessageSignatureR8y string `json:"messageSignatureR8y"`
+	MessageSignatureS   string `json:"messageSignatureS"`
+}
 
 type RegisterRequest struct {
 	Id     uuid.UUID      `json:"id"`

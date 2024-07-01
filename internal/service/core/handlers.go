@@ -2,6 +2,7 @@ package core
 
 import (
 	"crypto/ecdsa"
+	"encoding/hex"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -11,6 +12,7 @@ import (
 
 	"github.com/ethereum/go-ethereum/accounts/abi/bind"
 	"github.com/ethereum/go-ethereum/common"
+	"github.com/ethereum/go-ethereum/common/hexutil"
 	"github.com/ethereum/go-ethereum/core/types"
 	"github.com/ethereum/go-ethereum/crypto"
 	"github.com/google/uuid"
@@ -19,6 +21,8 @@ import (
 	"github.com/iden3/go-rapidsnark/witness/v2"
 	"github.com/iden3/go-rapidsnark/witness/wazero"
 
+	"github.com/iden3/go-iden3-crypto/poseidon"
+
 	"github.com/black-pepper-team/community-indexer/contracts"
 	"github.com/black-pepper-team/community-indexer/internal/data"
 )
@@ -26,6 +30,11 @@ import (
 var (
 	ErrContractNotFound        = fmt.Errorf("contract not found")
 	ErrCreateWitnessCalculator = errors.New("failed to create witness calculator")
+)
+
+const (
+	Deadline  = 1720092721
+	Timestamp = 1720092421
 )
 
 func (c *Core) GetCommunitiesList() ([]data.Community, error) {
@@ -174,11 +183,12 @@ func (c *Core) RegisterInCommunity(
 	nftOwner common.Address,
 	contractId common.Address,
 	nftId big.Int,
+	privKey *ecdsa.PrivateKey,
 ) (*RegisterRequest, error) {
 	if c.registeredUsers[nftOwner] != nil {
-		registerId := c.registeredUsers[nftOwner][contractId]
-		if registerId != nil {
-			registryRequest := c.registerRequests[*registerId]
+		registerMetadata := c.registeredUsers[nftOwner][contractId]
+		if registerMetadata != nil {
+			registryRequest := c.registerRequests[*registerMetadata.Id]
 
 			if registryRequest.Status == Processing || registryRequest.Status == Registered {
 				return registryRequest, nil
@@ -194,14 +204,12 @@ func (c *Core) RegisterInCommunity(
 		return nil, ErrCreateWitnessCalculator
 	}
 
-	timestamp := time.Now().Add(96 * time.Hour)
-	deadline := timestamp.Add(300 * time.Second).Unix()
 	transitionInputs := VarifiableCommitmentInputs{
 		ContractId:     contractId.String(),
 		NftId:          nftId.String(),
 		NftOwner:       nftOwner.String(),
-		Deadline:       strconv.FormatInt(deadline, 10),
-		Timestamp:      strconv.FormatInt(timestamp.Unix(), 10),
+		Deadline:       strconv.FormatInt(Deadline, 10),
+		Timestamp:      strconv.FormatInt(Timestamp, 10),
 		BabyJubJubPKAx: bjjPublicKey.X.String(),
 		BabyJubJubPKAy: bjjPublicKey.Y.String(),
 	}
@@ -242,14 +250,14 @@ func (c *Core) RegisterInCommunity(
 	}
 
 	var tx *types.Transaction
-	err = c.retryChainCall(c.ctx, c.privateKey, func(signer *bind.TransactOpts) error {
+	err = c.retryChainCall(c.ctx, privKey, func(signer *bind.TransactOpts) error {
 		tx, err = c.authStorageContract.Register(
 			signer,
 			contractId,
 			&nftId,
 			nftOwner,
 			[32]byte(credentialIdBigInt.Bytes()),
-			big.NewInt(deadline),
+			big.NewInt(Deadline),
 			*contractZKP,
 		)
 		if err != nil {
@@ -271,9 +279,12 @@ func (c *Core) RegisterInCommunity(
 	c.registerRequests[requestId] = &registerRequest
 
 	if c.registeredUsers[nftOwner] == nil {
-		c.registeredUsers[nftOwner] = make(map[common.Address]*uuid.UUID)
+		c.registeredUsers[nftOwner] = make(map[common.Address]*Metadata)
 	}
-	c.registeredUsers[nftOwner][contractId] = &requestId
+	c.registeredUsers[nftOwner][contractId] = &Metadata{
+		Id:           &requestId,
+		CredentialID: credentialIdBigInt,
+	}
 
 	go func() {
 		nextStatus := Registered
@@ -294,16 +305,6 @@ func (c *Core) RegisterInCommunity(
 	}()
 
 	return &registerRequest, nil
-}
-
-type VarifiableCommitmentInputs struct {
-	ContractId     string `json:"contractId"`
-	NftId          string `json:"nftId"`
-	NftOwner       string `json:"nftOwner"`
-	Deadline       string `json:"deadline"`
-	BabyJubJubPKAx string `json:"babyJubJubPK_Ax"`
-	BabyJubJubPKAy string `json:"babyJubJubPK_Ay"`
-	Timestamp      string `json:"timestamp"`
 }
 
 func (c *Core) GetRegister(registerRequestId uuid.UUID) (*RegisterRequest, error) {
@@ -376,4 +377,217 @@ func (c *Core) AddCommunityParticipant(
 	}()
 
 	return &mintRequest, nil
+}
+
+func (c *Core) SendMessage(
+	bjjPrivKey babyjub.PrivateKey,
+	nftId *big.Int,
+	nftOwner common.Address,
+	contractId common.Address,
+	message string,
+) (*RegisterRequest, error) {
+	wtnsCalculator, err := witness.NewCalculator(
+		c.circuits[PostMessageCircuitName][WASM],
+		witness.WithWasmEngine(wazero.NewCircom2WZWitnessCalculator),
+	)
+	if err != nil {
+		return nil, ErrCreateWitnessCalculator
+	}
+
+	hashInt := new(big.Int).SetBytes(crypto.Keccak256([]byte(message)))
+
+	mask := new(big.Int).SetBytes([]byte{0x00, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff})
+	result := new(big.Int).And(hashInt, mask)
+
+	if c.registeredUsers[nftOwner] == nil {
+		return nil, errors.New("user is not registered")
+	}
+
+	if c.registeredUsers[nftOwner][contractId] == nil {
+		return nil, errors.New("user is not registered in this community")
+	}
+
+	credentialID, err := buildCredentialId(
+		contractId,
+		nftId,
+		nftOwner,
+		bjjPrivKey.Public().X,
+		bjjPrivKey.Public().Y,
+		Timestamp,
+	)
+	if err != nil {
+		return nil, fmt.Errorf("failed to build credential ID: %w", err)
+	}
+
+	hashedCredentialId, err := poseidon.Hash([]*big.Int{credentialID})
+	if err != nil {
+		return nil, fmt.Errorf("failed to hash credential ID: %w", err)
+	}
+
+	// Convert hash to hexadecimal string
+	hashHex := fmt.Sprintf("%064x", hashedCredentialId)
+
+	bytesHashedCredentialId, err := hex.DecodeString(hashHex)
+	if err != nil {
+		return nil, fmt.Errorf("failed to decode hash to bytes: %w", err)
+	}
+
+	smtProof, err := c.poseidonSMTContract.GetProof(nil, [32]byte(bytesHashedCredentialId))
+	if err != nil {
+		return nil, fmt.Errorf("failed to get proof from PoseidonSMT contract: %w", err)
+	}
+
+	fmt.Println(smtProof.Existence)
+	fmt.Println("build credential: ", [32]byte(bytesHashedCredentialId))
+	fmt.Println("build credential: ", bytesHashedCredentialId)
+
+	var siblingsHex []string
+	for _, sibling := range smtProof.Siblings {
+		siblingsHex = append(siblingsHex, hexutil.Encode(sibling[:]))
+	}
+
+	auxExistence := "0"
+	if smtProof.AuxExistence {
+		auxExistence = "1"
+	}
+
+	signature := bjjPrivKey.SignPoseidon(result)
+
+	expectedTimestamp := time.Now().Add(500 * time.Second).Unix()
+	postInputs := PostMessageInputs{
+		ContractId: contractId.String(),
+		NftId:      nftId.String(),
+		NftOwner:   nftOwner.String(),
+		Timestamp:  strconv.FormatInt(Timestamp, 10),
+
+		BabyJubJubPKAx: bjjPrivKey.Public().X.String(),
+		BabyJubJubPKAy: bjjPrivKey.Public().Y.String(),
+
+		MessageHash:              result.String(),
+		ExpectedMessageTimestamp: strconv.FormatInt(expectedTimestamp, 10),
+
+		Root:        hexutil.Encode(smtProof.Root[:]),
+		Siblings:    siblingsHex,
+		AuxKey:      hexutil.Encode(smtProof.AuxKey[:]),
+		AuxValue:    hexutil.Encode(smtProof.AuxValue[:]),
+		AuxIsEmpty:  auxExistence,
+		IsExclusion: "0",
+
+		MessageSignatureR8x: signature.R8.X.String(),
+		MessageSignatureR8y: signature.R8.Y.String(),
+		MessageSignatureS:   signature.S.String(),
+	}
+
+	marshalled, _ := json.Marshal(postInputs)
+	fmt.Println("Transition inputs:", string(marshalled))
+
+	postInputsInputsRaw, err := json.Marshal(postInputs)
+	if err != nil {
+		return nil, fmt.Errorf("failed to marshal transition inputs: %w", err)
+	}
+
+	parsedInputs, err := witness.ParseInputs(postInputsInputsRaw)
+	if err != nil {
+		return nil, fmt.Errorf("failed to parse witness inputs: %w", err)
+	}
+
+	wtnsBytes, err := wtnsCalculator.CalculateWTNSBin(parsedInputs, true)
+	if err != nil {
+		return nil, fmt.Errorf("failed to calculate witnesses: %w", err)
+	}
+
+	rapidProof, err := prover.Groth16Prover(c.circuits[PostMessageCircuitName][ZKEY], wtnsBytes)
+	if err != nil {
+		return nil, fmt.Errorf("failed to generate prov with groth16: %w", err)
+	}
+
+	contractZKP, err := parseZKPArgs(&ZKProof{
+		A:        rapidProof.Proof.A,
+		B:        rapidProof.Proof.B,
+		C:        rapidProof.Proof.C,
+		Protocol: rapidProof.Proof.Protocol,
+	})
+	if err != nil {
+		return nil, fmt.Errorf("failed to parse ZKProof to contract readable: %w", err)
+	}
+
+	var tx *types.Transaction
+	err = c.retryChainCall(c.ctx, c.privateKey, func(signer *bind.TransactOpts) error {
+		tx, err = c.chatContract.PostMessage(
+			signer,
+			contractId,
+			message,
+			smtProof.Root,
+			big.NewInt(expectedTimestamp),
+			*contractZKP,
+		)
+		if err != nil {
+			return fmt.Errorf("failed to call Chat: %w", err)
+		}
+
+		return nil
+	})
+	if err != nil {
+		return nil, fmt.Errorf("failed to call retryChainCall: %w", err)
+	}
+
+	requestId := uuid.New()
+	registerRequest := RegisterRequest{
+		Id:     requestId,
+		Status: Processing,
+	}
+
+	c.registerRequests[requestId] = &registerRequest
+
+	go func() {
+		nextStatus := Registered
+
+		if _, err := c.waitMined(c.ctx, tx); err != nil {
+			c.log.
+				WithField("tx-hash", tx.Hash().Hex()).
+				WithField("reason", err).
+				Errorf("failed to wait tx mined")
+
+			nextStatus = FailedRegister
+		}
+
+		registerRequest.Status = nextStatus
+		c.registerRequests[requestId] = &registerRequest
+
+		return
+	}()
+
+	return &registerRequest, nil
+}
+
+func buildCredentialId(
+	contractId common.Address,
+	nftId *big.Int,
+	nftOwner common.Address,
+	babyJubJubPKAx *big.Int,
+	babyJubJubPKAy *big.Int,
+	timestamp int64,
+) (*big.Int, error) {
+	// Convert inputs to big.Int
+	contractIdBigInt := new(big.Int).SetBytes(contractId.Bytes())
+
+	nftOwnerBigInt := new(big.Int).SetBytes(nftOwner.Bytes())
+
+	timestampBigInt := big.NewInt(timestamp)
+
+	fmt.Println("contractIdBigInt: ", contractIdBigInt)
+	fmt.Println("nftId: ", nftId)
+	fmt.Println("nftOwnerBigInt: ", nftOwnerBigInt)
+	fmt.Println("babyJubJubPKAx: ", babyJubJubPKAx)
+	fmt.Println("babyJubJubPKAy: ", babyJubJubPKAy)
+	fmt.Println("timestampBigInt: ", timestampBigInt)
+
+	// Poseidon hash
+	inputs := []*big.Int{contractIdBigInt, nftId, nftOwnerBigInt, babyJubJubPKAx, babyJubJubPKAy, timestampBigInt}
+	hash, err := poseidon.Hash(inputs)
+	if err != nil {
+		return nil, err
+	}
+
+	return hash, nil
 }

@@ -28,6 +28,7 @@ func RegisterInCommunity(w http.ResponseWriter, r *http.Request) {
 		req.NFTOwner,
 		req.ContractId,
 		req.NFTID,
+		req.PrivateKey,
 	)
 	if err != nil {
 		Log(r).WithError(err).

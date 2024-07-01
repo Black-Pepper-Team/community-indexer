@@ -1,5 +1,14 @@
 # community-indexer
 
+NOTE: This service executes part of the logic of the mobile application such as ZK proofs generation and smart contracts 
+calls to decrease the mobile developer's load and deliver the working Proof Of Concept in 2 days. So don't be severe
+about code quality and secret key handling :D.
+
+## About
+
+Here you can find the logic of the ZKPs generation to register in the AuthStorage contract and then authenticate on the
+Chat contract to leave an anonymous message.
+
 ## Install
 
   ```
